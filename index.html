@@ -11,7 +11,9 @@
             --card-bg: #ffffff;
             --text: #333;
             --correct: #d4edda;
+            --correct-border: #28a745;
             --wrong: #f8d7da;
+            --wrong-border: #dc3545;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -69,33 +71,46 @@
         }
         .question-card {
             border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 5px;
+            padding: 20px;
+            border-radius: 8px;
             margin-bottom: 15px;
             background: #fafafa;
         }
         .question-title {
             font-weight: bold;
-            margin-bottom: 10px;
+            font-size: 18px;
+            margin-bottom: 15px;
             white-space: pre-wrap;
+            line-height: 1.5;
         }
         .options {
             list-style-type: none;
             padding: 0;
         }
-        .options li {
-            margin-bottom: 8px;
-            padding: 8px;
-            border-radius: 4px;
+        .option-item {
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+            display: flex;
+            align-items: center;
+        }
+        .option-item:hover {
+            background-color: #f1f1f1;
+            border-color: #bbb;
         }
         .explanation {
-            margin-top: 10px;
-            padding: 10px;
+            margin-top: 20px;
+            padding: 15px;
             background: #e2e3e5;
-            border-left: 4px solid #6c757d;
-            font-size: 14px;
+            border-left: 5px solid var(--primary);
+            font-size: 15px;
             display: none;
             white-space: pre-wrap;
+            line-height: 1.5;
         }
         .btn-primary {
             background: var(--primary);
@@ -107,6 +122,7 @@
             cursor: pointer;
             width: 100%;
             margin-top: 10px;
+            transition: 0.2s;
         }
         .btn-primary:hover {
             background: #004494;
@@ -116,11 +132,12 @@
             font-size: 24px;
             font-weight: bold;
             margin: 20px 0;
-            padding: 15px;
+            padding: 25px;
             background: #d1ecf1;
             color: #0c5460;
-            border-radius: 5px;
+            border-radius: 8px;
             display: none;
+            border: 2px solid #bee5eb;
         }
     </style>
 </head>
@@ -131,7 +148,7 @@
     
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('search')">Cari Soal & Jawaban</button>
-        <button class="tab-btn" onclick="switchTab('quiz')">Simulasi UTS (80 Soal)</button>
+        <button class="tab-btn" onclick="switchTab('quiz')">Simulasi UTS (Per Slide)</button>
     </div>
 
     <!-- TAB 1: PENCARIAN -->
@@ -143,11 +160,12 @@
 
     <!-- TAB 2: SIMULASI UTS -->
     <div id="quiz" class="tab-content">
-        <p style="text-align:center;">Sistem akan mengacak maksimal 80 soal dari bank soal. Kerjakan untuk mengukur kesiapanmu!</p>
-        <button class="btn-primary" id="startQuizBtn" onclick="startQuiz()">Mulai Simulasi UTS Baru</button>
+        <div id="quizIntro" style="text-align:center; margin-bottom: 20px;">
+            <p>Sistem akan mengacak 80 soal. Jawab satu per satu dan evaluasi langsung!</p>
+            <button class="btn-primary" id="startQuizBtn" onclick="startQuiz()">Mulai Simulasi UTS</button>
+        </div>
         <div id="scoreBoard"></div>
         <div id="quizContainer"></div>
-        <button class="btn-primary" id="submitQuizBtn" style="display:none;" onclick="submitQuiz()">Cek Jawaban & Nilai</button>
     </div>
 </div>
 
@@ -2791,28 +2809,23 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
 <script>
     let questionBank = [];
     let currentQuiz = [];
+    let currentQuestionIndex = 0;
+    let currentScore = 0;
 
-    // Fungsi untuk mem-parsing raw data teks ke dalam array object JSON
+    // Fungsi parsing raw data teks
     function parseRawData() {
         const rawText = document.getElementById('rawData').value;
-        
-        // PERBAIKAN: Memisahkan berdasarkan kemunculan "Q" diikuti angka (misal Q1.1.)
-        // Daripada memisahkan dengan garis putus-putus yang tidak konsisten di teks aslinya
         const blocks = rawText.split(/\n(?=Q\d+\.\d+\.)/); 
         
         blocks.forEach(block => {
-            if (!block.includes('Explanation:')) return; // Abaikan blok yang bukan soal
+            if (!block.includes('Explanation:')) return; 
             
             let text = block.trim();
-            
-            // Bersihkan sisa-sisa garis putus-putus atau sama dengan dari dalam teks
             text = text.replace(/[-=]{5,}/g, '').trim();
             
-            // Regex Ekstrak Soal (Ambil dari Qx.x. sampai sebelum opsi A)
             let qMatch = text.match(/^(Q\d+\.\d+\.\s*.*?)(?=\n[ \t]*[a-eA-E]\))/s);
             let questionText = qMatch ? qMatch[1].trim() : "";
             
-            // Regex Ekstrak Opsi (Mendeteksi a), b), A), B) di awal baris)
             let options = [];
             let optRegex = /^[ \t]*([a-eA-E]\)[ \t]*.*)/gm;
             let optMatch;
@@ -2820,11 +2833,9 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
                 options.push(optMatch[1].trim());
             }
             
-            // Regex Ekstrak Jawaban Benar
             let ansMatch = text.match(/Correct Answer:\s*([a-eA-E]\).*)/i);
             let answerText = ansMatch ? ansMatch[1].trim() : "";
             
-            // Regex Ekstrak Pembahasan (Ambil sisa teks setelah 'Explanation:')
             let expMatch = text.match(/Explanation:\s*([\s\S]*)/i);
             let explanationText = expMatch ? expMatch[1].trim() : "";
             
@@ -2835,12 +2846,10 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
                     answer: answerText,
                     explanation: explanationText
                 });
-            } else {
-                console.warn("Ada soal yang formatnya terlalu berantakan dan dilewati:", text.substring(0, 60));
             }
         });
         
-        console.log("Berhasil memuat " + questionBank.length + " soal secara total.");
+        console.log("Berhasil memuat " + questionBank.length + " soal.");
         renderSearchList(questionBank);
     }
 
@@ -2848,7 +2857,6 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        
         document.getElementById(tabId).classList.add('active');
         event.currentTarget.classList.add('active');
     }
@@ -2869,17 +2877,15 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
         const container = document.getElementById('searchResults');
         const count = document.getElementById('searchCount');
         container.innerHTML = '';
-        count.innerHTML = `Ditemukan: <b>${list.length}</b> soal terdaftar`;
+        count.innerHTML = `Ditemukan: <b>${list.length}</b> soal`;
 
         list.forEach((item, index) => {
             const card = document.createElement('div');
             card.className = 'question-card';
-            
             let optsHTML = item.options.map(o => `<li>${o}</li>`).join('');
-            
             card.innerHTML = `
                 <div class="question-title">${item.question}</div>
-                <ul class="options">${optsHTML}</ul>
+                <ul class="options" style="margin-left: 20px;">${optsHTML}</ul>
                 <div style="color: green; font-weight: bold; margin-bottom: 5px;">${item.answer}</div>
                 <div style="font-size: 14px; background: #eee; padding: 10px; border-radius: 4px;"><b>Explanation:</b> ${item.explanation}</div>
             `;
@@ -2887,91 +2893,120 @@ Q2.45. Why is it essential for designers to empathize with users and understand 
         });
     }
 
-    // Fungsi Memulai Kuis Acak (Simulasi UTS)
+    // LOGIKA KUIS SLIDE-BY-SLIDE
     function startQuiz() {
-        // Mengacak array
         let shuffled = [...questionBank].sort(() => 0.5 - Math.random());
-        // Mengambil 80 soal (atau sebanyak maksimal bank soal jika kurang dari 80)
         currentQuiz = shuffled.slice(0, 80);
+        currentQuestionIndex = 0;
+        currentScore = 0;
         
-        const container = document.getElementById('quizContainer');
-        container.innerHTML = '';
+        document.getElementById('quizIntro').style.display = 'none';
         document.getElementById('scoreBoard').style.display = 'none';
         
-        currentQuiz.forEach((item, index) => {
-            const card = document.createElement('div');
-            card.className = 'question-card';
-            card.id = `quiz-card-${index}`;
-            
-            let optsHTML = item.options.map(o => {
-                let val = o.charAt(0).toLowerCase();
-                // Membersihkan tag HTML tak sengaja jika ada
-                let textOption = o.replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
-                return `
-                    <li>
-                        <label style="cursor:pointer; display:block;">
-                            <input type="radio" name="q${index}" value="${val}"> ${textOption}
-                        </label>
-                    </li>
-                `;
-            }).join('');
-            
-            card.innerHTML = `
-                <div class="question-title">${index + 1}. ${item.question}</div>
-                <ul class="options">${optsHTML}</ul>
-                <div class="explanation" id="exp-${index}">
-                    <b>Jawaban Benar: ${item.answer}</b><br><br>
-                    ${item.explanation}
-                </div>
-            `;
-            container.appendChild(card);
-        });
+        renderQuestion(currentQuestionIndex);
+    }
+
+    function renderQuestion(index) {
+        const container = document.getElementById('quizContainer');
+        container.innerHTML = ''; 
         
-        document.getElementById('submitQuizBtn').style.display = 'block';
+        // Cek jika kuis sudah selesai
+        if (index >= currentQuiz.length) {
+            showFinalScore();
+            return;
+        }
+
+        let item = currentQuiz[index];
+        const card = document.createElement('div');
+        card.className = 'question-card';
+        
+        let optsHTML = item.options.map((o, i) => {
+            let val = o.charAt(0).toLowerCase();
+            let textOption = o.replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
+            return `
+                <li class="option-item" id="opt-${i}" onclick="checkAnswer('${val}', ${i})">
+                    ${textOption}
+                </li>
+            `;
+        }).join('');
+        
+        card.innerHTML = `
+            <div style="font-size: 14px; color: #6c757d; margin-bottom: 15px; font-weight: bold;">
+                Soal ${index + 1} dari ${currentQuiz.length}
+            </div>
+            <div class="question-title">${item.question}</div>
+            <ul class="options">${optsHTML}</ul>
+            
+            <div class="explanation" id="explanationBox">
+                <div style="color: var(--primary); font-weight: bold; margin-bottom: 8px;">
+                    Jawaban Benar: ${item.answer}
+                </div>
+                <div>${item.explanation}</div>
+            </div>
+            
+            <button class="btn-primary" id="nextBtn" style="display:none; padding: 15px; font-weight:bold;" onclick="nextQuestion()">Selanjutnya &raquo;</button>
+        `;
+        
+        container.appendChild(card);
         window.scrollTo(0, 0);
     }
 
-    // Fungsi Koreksi dan Hitung Nilai
-    function submitQuiz() {
-        let score = 0;
+    function checkAnswer(selectedVal, optIndex) {
+        let item = currentQuiz[currentQuestionIndex];
+        let correctVal = item.answer.charAt(0).toLowerCase();
+        let isAnswered = document.getElementById('nextBtn').style.display === 'block';
         
-        currentQuiz.forEach((item, index) => {
-            const card = document.getElementById(`quiz-card-${index}`);
-            const selected = document.querySelector(`input[name="q${index}"]:checked`);
-            const correctVal = item.answer.charAt(0).toLowerCase();
+        // Kunci jawaban jika sudah diklik
+        if (isAnswered) return;
+
+        // Evaluasi semua opsi untuk pewarnaan
+        item.options.forEach((o, i) => {
+            let val = o.charAt(0).toLowerCase();
+            let li = document.getElementById(`opt-${i}`);
+            li.style.cursor = 'default'; // matikan hover cursor
             
-            if (selected) {
-                if (selected.value === correctVal) {
-                    score++;
-                    card.style.borderColor = "green";
-                    card.style.backgroundColor = "var(--correct)";
-                } else {
-                    card.style.borderColor = "red";
-                    card.style.backgroundColor = "var(--wrong)";
-                }
-            } else {
-                card.style.borderColor = "orange"; // Indikator jika tidak diisi
+            if (val === correctVal) {
+                // Warna Hijau untuk jawaban yang benar
+                li.style.backgroundColor = "var(--correct)";
+                li.style.borderColor = "var(--correct-border)";
+            } else if (val === selectedVal && val !== correctVal) {
+                // Warna Merah kalau salah pencet
+                li.style.backgroundColor = "var(--wrong)";
+                li.style.borderColor = "var(--wrong-border)";
             }
-            
-            // Tampilkan penjelasan
-            document.getElementById(`exp-${index}`).style.display = 'block';
-            
-            // Disable radio button
-            const radios = document.querySelectorAll(`input[name="q${index}"]`);
-            radios.forEach(r => r.disabled = true);
         });
-        
-        // Kalkulasi Nilai Skala 100
-        const finalScore = Math.round((score / currentQuiz.length) * 100);
-        const scoreBoard = document.getElementById('scoreBoard');
-        scoreBoard.style.display = 'block';
-        scoreBoard.innerHTML = `Nilai Kamu: ${finalScore} <br><span style="font-size:16px;">(Benar ${score} dari ${currentQuiz.length} soal)</span>`;
-        
-        document.getElementById('submitQuizBtn').style.display = 'none';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Tambah nilai jika benar
+        if (selectedVal === correctVal) {
+            currentScore++;
+        }
+
+        // Tampilkan penjelasan dan tombol next
+        document.getElementById('explanationBox').style.display = 'block';
+        document.getElementById('nextBtn').style.display = 'block';
     }
 
-    // Jalankan parsing data saat halaman dimuat
+    function nextQuestion() {
+        currentQuestionIndex++;
+        renderQuestion(currentQuestionIndex);
+    }
+
+    function showFinalScore() {
+        const finalScore = Math.round((currentScore / currentQuiz.length) * 100);
+        const scoreBoard = document.getElementById('scoreBoard');
+        
+        scoreBoard.style.display = 'block';
+        scoreBoard.innerHTML = `
+            🎉 Latihan Selesai! 🎉<br><br>
+            Nilai Akhir Kamu: <span style="font-size: 38px; color: var(--primary);">${finalScore}</span><br>
+            <span style="font-size:16px; font-weight: normal;">(Berhasil menjawab benar ${currentScore} dari ${currentQuiz.length} soal)</span>
+        `;
+        
+        document.getElementById('quizIntro').style.display = 'block';
+        document.getElementById('startQuizBtn').innerText = 'Ulangi Simulasi UTS';
+        window.scrollTo(0, 0);
+    }
+
     window.onload = parseRawData;
 </script>
 </body>
